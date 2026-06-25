@@ -71,6 +71,7 @@
             padding: 0 15px;
         }
 
+        /* 設定・クイズ共通カードスタイル */
         .quiz-card {
             background-color: var(--card-background);
             border-radius: 12px;
@@ -79,6 +80,68 @@
             margin-bottom: 20px;
         }
 
+        /* 設定画面用のスタイル */
+        .config-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+            color: var(--primary-color);
+            border-bottom: 2px solid #e0e6e4;
+            padding-bottom: 10px;
+        }
+
+        .config-group {
+            margin-bottom: 20px;
+        }
+
+        .config-label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+
+        .radio-tile-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .radio-tile-group.triple {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+
+        .radio-label {
+            display: block;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .radio-label input {
+            position: absolute;
+            opacity: 0;
+        }
+
+        .radio-tile {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 12px;
+            border: 2px solid #e0e6e4;
+            border-radius: 8px;
+            background-color: #f8faf9;
+            font-weight: bold;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .radio-label input:checked + .radio-tile {
+            border-color: var(--primary-color);
+            background-color: #e0f2f1;
+            color: var(--primary-color);
+        }
+
+        /* クイズ画面用スタイル */
         .question-meta {
             font-size: 0.85rem;
             color: #777;
@@ -154,6 +217,7 @@
             border-color: var(--error-color);
         }
 
+        /* 解説エリア */
         .result-panel {
             display: none;
             margin-top: 20px;
@@ -262,9 +326,11 @@
 </div>
 
 <script>
-    let quizData = [];
+    let masterQuizData = []; // CSVから読み込んだ全データ
+    let activeQuizData = []; // 今回解くデータ（シャッフルや問題数調整後）
     let currentQuestionIndex = 0;
 
+    // 堅牢なCSVパース関数
     function parseCSV(text) {
         const lines = [];
         let row = [""];
@@ -327,21 +393,20 @@
         return result;
     }
 
+    // CSVファイルの読み込み
     fetch('data.csv?v=' + new Date().getTime())
         .then(response => {
             if (!response.ok) throw new Error('data.csv が見つからないか、読み込めません (Status: ' + response.status + ')');
             return response.text();
         })
         .then(text => {
-            if (!text.trim()) {
-                throw new Error('data.csv ファイルの中身が空っぽです');
-            }
-            quizData = parseCSV(text);
-            if (quizData.length > 0) {
-                showQuestion(currentQuestionIndex);
+            if (!text.trim()) throw new Error('data.csv ファイルの中身が空っぽです');
+            masterQuizData = parseCSV(text);
+            if (masterQuizData.length > 0) {
+                showConfigScreen(); // 読み込み成功したら初期設定画面を表示
             } else {
                 document.getElementById('quiz-container').innerHTML = 
-                    '<div class="status-screen">有効な問題データ（行）が見つかりませんでした。<br>CSVの記述形式を確認してください。</div>';
+                    '<div class="status-screen">有効な問題データが見つかりませんでした。</div>';
             }
         })
         .catch(error => {
@@ -350,8 +415,82 @@
                 '<div class="status-screen">エラーが発生しました：<span class="error-details">' + error.message + '</span></div>';
         });
 
+    // 初期設定・スタート画面を表示する関数
+    function showConfigScreen() {
+        const container = document.getElementById('quiz-container');
+        container.innerHTML = `
+            <div class="quiz-card">
+                <div class="config-title">出題設定</div>
+                
+                <div class="config-group">
+                    <span class="config-label">出題順</span>
+                    <div class="radio-tile-group">
+                        <label class="radio-label">
+                            <input type="radio" name="order" value="normal" checked>
+                            <div class="radio-tile">番号順</div>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="order" value="random">
+                            <div class="radio-tile">ランダム</div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="config-group">
+                    <span class="config-label">出題問題数</span>
+                    <div class="radio-tile-group triple">
+                        <label class="radio-label">
+                            <input type="radio" name="count" value="10" checked>
+                            <div class="radio-tile">10問</div>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="count" value="30">
+                            <div class="radio-tile">30問</div>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="count" value="all">
+                            <div class="radio-tile">全問 (${masterQuizData.length}問)</div>
+                        </label>
+                    </div>
+                </div>
+
+                <button class="nav-btn" style="margin-top: 30px;" onclick="startQuiz()">クイズを開始する</button>
+            </div>
+        `;
+    }
+
+    // クイズ開始処理（配列のシャッフルと切り出し）
+    function startQuiz() {
+        const order = document.querySelector('input[name="order"]:checked').value;
+        const countValue = document.querySelector('input[name="count"]:checked').value;
+
+        // 元データをディープコピー
+        let processedData = JSON.parse(JSON.stringify(masterQuizData));
+
+        // 1. ランダムであればシャッフル（Fisher-Yates アルゴリズム）
+        if (order === 'random') {
+            for (let i = processedData.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [processedData[i], processedData[j]] = [processedData[j], processedData[i]];
+            }
+        }
+
+        // 2. 出題数の切り出し
+        if (countValue === '10') {
+            activeQuizData = processedData.slice(0, 10);
+        } else if (countValue === '30') {
+            activeQuizData = processedData.slice(0, 30);
+        } else {
+            activeQuizData = processedData; // 全問
+        }
+
+        currentQuestionIndex = 0;
+        showQuestion(currentQuestionIndex);
+    }
+
+    // 問題を表示する関数
     function showQuestion(index) {
-        const item = quizData[index];
+        const item = activeQuizData[index];
         const container = document.getElementById('quiz-container');
         
         let optionsHTML = '';
@@ -361,14 +500,14 @@
 
         container.innerHTML = `
             <div class="quiz-card">
-                <div class="question-meta">問題 ID: ${item.id} (${index + 1} / ${quizData.length})</div>
+                <div class="question-meta">問題 ID: ${item.id} (${index + 1} / ${activeQuizData.length})</div>
                 <div class="question-text">${item.question}</div>
                 <ul class="options-list">
                     ${optionsHTML}
                 </ul>
                 
                 <div id="action-panel" class="quiz-actions">
-                    <button class="quit-btn" onclick="abortQuiz()">一時中断する</button>
+                    <button class="quit-btn" onclick="abortQuiz()">設定に戻る（中断）</button>
                 </div>
                 
                 <div id="result-panel" class="result-panel">
@@ -384,13 +523,14 @@
                     </div>` : ''}
                     
                     <button class="nav-btn" onclick="nextQuestion()">
-                        ${index === quizData.length - 1 ? '最初から解き直す' : '次の問題へ'}
+                        ${index === activeQuizData.length - 1 ? '設定画面に戻る（終了）' : '次の問題へ'}
                     </button>
                 </div>
             </div>
         `;
     }
 
+    // 正誤判定
     function checkAnswer(selectedElement, selectedNum, correctNum) {
         const options = document.querySelectorAll('.option-item');
         options.forEach(opt => opt.classList.add('disabled'));
@@ -414,18 +554,21 @@
         resultPanel.style.display = 'block';
     }
 
+    // 次の問題へ
     function nextQuestion() {
         currentQuestionIndex++;
-        if (currentQuestionIndex >= quizData.length) {
-            currentQuestionIndex = 0;
+        if (currentQuestionIndex >= activeQuizData.length) {
+            // 全問解き終わったら設定画面に戻る
+            showConfigScreen();
+        } else {
+            showQuestion(currentQuestionIndex);
         }
-        showQuestion(currentQuestionIndex);
     }
 
+    // 中断して最初の設定画面に戻るロジック
     function abortQuiz() {
-        if (confirm("クイズを中断して最初の問題に戻りますか？\n（Meridian-Nodeに戻る場合は左上のリンクを押してください）")) {
-            currentQuestionIndex = 0;
-            showQuestion(currentQuestionIndex);
+        if (confirm("クイズを中断して設定画面に戻りますか？\n（現在の進行状況はリセットされます）")) {
+            showConfigScreen();
         }
     }
 </script>
