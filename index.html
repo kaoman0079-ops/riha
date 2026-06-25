@@ -1,1 +1,271 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AnatoHack - 国試対策クイズ</title>
+    <style>
+        :root {
+            --primary-color: #00796b;
+            --secondary-color: #00acc1;
+            --background-color: #f4f7f6;
+            --card-background: #ffffff;
+            --text-color: #333333;
+            --success-color: #4caf50;
+            --error-color: #f44336;
+            --nav-bg: #1f2937;
+        }
 
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            padding-bottom: 40px;
+        }
+
+        /* 外部ページ連携ナビゲーションバー */
+        .top-nav {
+            background-color: var(--nav-bg);
+            color: white;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .back-to-hub-btn {
+            color: #ffffff;
+            text-decoration: none;
+            background-color: #374151;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            transition: background 0.2s;
+            border: 1px solid #4b5563;
+        }
+
+        .back-to-hub-btn:hover {
+            background-color: #4b5563;
+        }
+
+        .brand-title {
+            font-size: 1.1rem;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+
+        /* メインコンテンツコンテナ */
+        .container {
+            max-width: 600px;
+            margin: 30px auto 0 auto;
+            padding: 0 15px;
+        }
+
+        .quiz-card {
+            background-color: var(--card-background);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+
+        .question-meta {
+            font-size: 0.85rem;
+            color: #777;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        .question-text {
+            font-size: 1.15rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            word-wrap: break-word;
+        }
+
+        .options-list {
+            list-style: none;
+        }
+
+        .option-item {
+            background-color: #f8faf9;
+            border: 2px solid #e0e6e4;
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .option-item:hover {
+            background-color: #e0f2f1;
+            border-color: var(--secondary-color);
+        }
+
+        .option-item.correct {
+            background-color: #e8f5e9;
+            border-color: var(--success-color);
+            color: #2e7d32;
+            font-weight: bold;
+        }
+
+        .option-item.incorrect {
+            background-color: #ffebee;
+            border-color: var(--error-color);
+            color: #c62828;
+        }
+
+        .option-item.disabled {
+            pointer-events: none;
+        }
+
+        /* アクションエリア（中断ボタンなど） */
+        .quiz-actions {
+            margin-top: 15px;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .quit-btn {
+            background: none;
+            border: 1px solid #9ca3af;
+            color: #6b7280;
+            padding: 6px 12px;
+            font-size: 0.85rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quit-btn:hover {
+            background-color: #f3f4f6;
+            color: var(--error-color);
+            border-color: var(--error-color);
+        }
+
+        /* 解説エリア */
+        .result-panel {
+            display: none;
+            margin-top: 20px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .judgment {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+        .judgment.correct-text { color: var(--success-color); }
+        .judgment.incorrect-text { color: var(--error-color); }
+
+        .explanation-box {
+            background-color: #f0f4f8;
+            border-left: 5px solid var(--secondary-color);
+            padding: 15px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 15px;
+        }
+
+        .explanation-title {
+            font-weight: bold;
+            color: #1a237e;
+            margin-bottom: 5px;
+            font-size: 0.95rem;
+        }
+
+        .point-box {
+            background-color: #fff9c4;
+            border-left: 5px solid #fbc02d;
+            padding: 15px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+        }
+
+        .point-title {
+            font-weight: bold;
+            color: #f57f17;
+            margin-bottom: 5px;
+        }
+
+        .nav-btn {
+            display: block;
+            width: 100%;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 14px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: center;
+            transition: background 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .nav-btn:hover {
+            background-color: #004d40;
+        }
+
+        .loading, .status-screen {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.1rem;
+            color: #666;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+<nav class="top-nav">
+    <a href="https://kaoman0079-ops.github.io/Meridian-Node/" class="back-to-hub-btn">← Meridian-Node へ戻る</a>
+    <div class="brand-title">AnatoHack クイズ</div>
+    <div style="width: 100px;"></div> </nav>
+
+<div class="container">
+    <div id="quiz-container">
+        <div class="loading">問題を読み込んでいます...</div>
+    </div>
+</div>
+
+<script>
+    let quizData = [];
+    let currentQuestionIndex = 0;
+
+    // CSVパース
+    function parseCSV(text) {
+        const lines = text.split(/\r?\n/);
+        const result = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+            if (!lines[i].trim()) continue;
+            
+            const row = [];
+            let insideQuote = false;
+            let currentCell = "";
+            
+            for (
