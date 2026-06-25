@@ -71,7 +71,6 @@
             padding: 0 15px;
         }
 
-        /* 設定・クイズ共通カードスタイル */
         .quiz-card {
             background-color: var(--card-background);
             border-radius: 12px;
@@ -80,7 +79,6 @@
             margin-bottom: 20px;
         }
 
-        /* 設定画面用のスタイル */
         .config-title {
             font-size: 1.3rem;
             font-weight: bold;
@@ -141,7 +139,6 @@
             color: var(--primary-color);
         }
 
-        /* クイズ画面用スタイル */
         .question-meta {
             font-size: 0.85rem;
             color: #777;
@@ -217,7 +214,6 @@
             border-color: var(--error-color);
         }
 
-        /* 解説エリア */
         .result-panel {
             display: none;
             margin-top: 20px;
@@ -326,11 +322,11 @@
 </div>
 
 <script>
-    let masterQuizData = []; // CSVから読み込んだ全データ
-    let activeQuizData = []; // 今回解くデータ（シャッフルや問題数調整後）
+    let masterQuizData = []; 
+    let activeQuizData = []; 
     let currentQuestionIndex = 0;
 
-    // 堅牢なCSVパース関数
+    // RFC 4180に準拠した強固なCSVパース
     function parseCSV(text) {
         const lines = [];
         let row = [""];
@@ -374,18 +370,29 @@
         const result = [];
         for (let i = 1; i < lines.length; i++) {
             const r = lines[i];
-            if (r.length < 7 || !r[0].trim()) continue;
+            
+            // 最低限、正解番号（7列目）までのデータが存在するかチェック
+            if (r.length < 7) continue;
+            
+            // 問題IDまたは問題文が空の場合はスキップ
+            if (!r[0] || !r[0].trim() || !r[1] || !r[1].trim()) continue;
+
+            // 正解番号を安全にパース（失敗したら1をデフォルトに）
+            let correctNum = parseInt(r[6].trim(), 10);
+            if (isNaN(correctNum) || correctNum < 1 || correctNum > 4) {
+                correctNum = 1; 
+            }
 
             result.push({
                 id: r[0].trim(),
-                question: r[1] ? r[1].trim() : "",
+                question: r[1].trim(),
                 options: [
-                    r[2] ? r[2].trim() : "",
-                    r[3] ? r[3].trim() : "",
-                    r[4] ? r[4].trim() : "",
-                    r[5] ? r[5].trim() : ""
+                    r[2] ? r[2].trim() : "選択肢1",
+                    r[3] ? r[3].trim() : "選択肢2",
+                    r[4] ? r[4].trim() : "選択肢3",
+                    r[5] ? r[5].trim() : "選択肢4"
                 ],
-                correct: r[6] ? parseInt(r[6].trim(), 10) : 1,
+                correct: correctNum,
                 explanation: r[7] ? r[7].trim() : "解説はありません。",
                 point: r[8] ? r[8].trim() : ""
             });
@@ -393,8 +400,8 @@
         return result;
     }
 
-    // CSVファイルの読み込み
-    fetch('data.csv?v=' + new Date().getTime())
+    // キャッシュを完全に回避して最新のCSVをフェッチ
+    fetch('data.csv?t=' + Date.now())
         .then(response => {
             if (!response.ok) throw new Error('data.csv が見つからないか、読み込めません (Status: ' + response.status + ')');
             return response.text();
@@ -403,10 +410,10 @@
             if (!text.trim()) throw new Error('data.csv ファイルの中身が空っぽです');
             masterQuizData = parseCSV(text);
             if (masterQuizData.length > 0) {
-                showConfigScreen(); // 読み込み成功したら初期設定画面を表示
+                showConfigScreen();
             } else {
                 document.getElementById('quiz-container').innerHTML = 
-                    '<div class="status-screen">有効な問題データが見つかりませんでした。</div>';
+                    '<div class="status-screen">有効な問題データが1件も見つかりませんでした。<br>CSVの記述形式や列の数を確認してください。</div>';
             }
         })
         .catch(error => {
@@ -415,7 +422,6 @@
                 '<div class="status-screen">エラーが発生しました：<span class="error-details">' + error.message + '</span></div>';
         });
 
-    // 初期設定・スタート画面を表示する関数
     function showConfigScreen() {
         const container = document.getElementById('quiz-container');
         container.innerHTML = `
@@ -459,15 +465,12 @@
         `;
     }
 
-    // クイズ開始処理（配列のシャッフルと切り出し）
     function startQuiz() {
         const order = document.querySelector('input[name="order"]:checked').value;
         const countValue = document.querySelector('input[name="count"]:checked').value;
 
-        // 元データをディープコピー
         let processedData = JSON.parse(JSON.stringify(masterQuizData));
 
-        // 1. ランダムであればシャッフル（Fisher-Yates アルゴリズム）
         if (order === 'random') {
             for (let i = processedData.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
@@ -475,62 +478,69 @@
             }
         }
 
-        // 2. 出題数の切り出し
         if (countValue === '10') {
             activeQuizData = processedData.slice(0, 10);
         } else if (countValue === '30') {
             activeQuizData = processedData.slice(0, 30);
         } else {
-            activeQuizData = processedData; // 全問
+            activeQuizData = processedData;
         }
 
         currentQuestionIndex = 0;
         showQuestion(currentQuestionIndex);
     }
 
-    // 問題を表示する関数
     function showQuestion(index) {
-        const item = activeQuizData[index];
-        const container = document.getElementById('quiz-container');
-        
-        let optionsHTML = '';
-        item.options.forEach((option, i) => {
-            optionsHTML += `<li class="option-item" onclick="checkAnswer(this, ${i + 1}, ${item.correct})">${option}</li>`;
-        });
+        try {
+            const item = activeQuizData[index];
+            if (!item) throw new Error("問題データが存在しません。Index: " + index);
 
-        container.innerHTML = `
-            <div class="quiz-card">
-                <div class="question-meta">問題 ID: ${item.id} (${index + 1} / ${activeQuizData.length})</div>
-                <div class="question-text">${item.question}</div>
-                <ul class="options-list">
-                    ${optionsHTML}
-                </ul>
-                
-                <div id="action-panel" class="quiz-actions">
-                    <button class="quit-btn" onclick="abortQuiz()">設定に戻る（中断）</button>
-                </div>
-                
-                <div id="result-panel" class="result-panel">
-                    <div id="judgment" class="judgment"></div>
-                    <div class="explanation-box">
-                        <div class="explanation-title">【解説】</div>
-                        <div>${item.explanation}</div>
-                    </div>
-                    ${item.point ? `
-                    <div class="point-box">
-                        <div class="point-title">💡 重要ポイント</div>
-                        <div>${item.point}</div>
-                    </div>` : ''}
+            const container = document.getElementById('quiz-container');
+            
+            let optionsHTML = '';
+            item.options.forEach((option, i) => {
+                optionsHTML += `<li class="option-item" onclick="checkAnswer(this, ${i + 1}, ${item.correct})">${escapeHtml(option)}</li>`;
+            });
+
+            container.innerHTML = `
+                <div class="quiz-card">
+                    <div class="question-meta">問題 ID: ${escapeHtml(item.id)} (${index + 1} / ${activeQuizData.length})</div>
+                    <div class="question-text">${escapeHtml(item.question)}</div>
+                    <ul class="options-list">
+                        ${optionsHTML}
+                    </ul>
                     
-                    <button class="nav-btn" onclick="nextQuestion()">
-                        ${index === activeQuizData.length - 1 ? '設定画面に戻る（終了）' : '次の問題へ'}
-                    </button>
+                    <div id="action-panel" class="quiz-actions">
+                        <button class="quit-btn" onclick="abortQuiz()">設定に戻る（中断）</button>
+                    </div>
+                    
+                    <div id="result-panel" class="result-panel">
+                        <div id="judgment" class="judgment"></div>
+                        <div class="explanation-box">
+                            <div class="explanation-title">【解説】</div>
+                            <div>${escapeHtml(item.explanation)}</div>
+                        </div>
+                        ${item.point ? `
+                        <div class="point-box">
+                            <div class="point-title">💡 重要ポイント</div>
+                            <div>${escapeHtml(item.point)}</div>
+                        </div>` : ''}
+                        
+                        <button class="nav-btn" onclick="nextQuestion()">
+                            ${index === activeQuizData.length - 1 ? '設定画面に戻る（終了）' : '次の問題へ'}
+                        </button>
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
+        } catch (err) {
+            console.error(err);
+            document.getElementById('quiz-container').innerHTML = 
+                `<div class="status-screen">問題の表示中にエラーが発生しました。<br>
+                <span class="error-details">問題インデックス: ${index}<br>エラー内容: ${err.message}</span>
+                <button class="nav-btn" style="margin-top:20px;" onclick="showConfigScreen()">設定画面に戻る</button></div>`;
+        }
     }
 
-    // 正誤判定
     function checkAnswer(selectedElement, selectedNum, correctNum) {
         const options = document.querySelectorAll('.option-item');
         options.forEach(opt => opt.classList.add('disabled'));
@@ -546,7 +556,9 @@
             judgment.className = 'judgment correct-text';
         } else {
             selectedElement.classList.add('incorrect');
-            options[correctNum - 1].classList.add('correct');
+            if(options[correctNum - 1]) {
+                options[correctNum - 1].classList.add('correct');
+            }
             judgment.textContent = '❌ 不正解...';
             judgment.className = 'judgment incorrect-text';
         }
@@ -554,22 +566,30 @@
         resultPanel.style.display = 'block';
     }
 
-    // 次の問題へ
     function nextQuestion() {
         currentQuestionIndex++;
         if (currentQuestionIndex >= activeQuizData.length) {
-            // 全問解き終わったら設定画面に戻る
             showConfigScreen();
         } else {
             showQuestion(currentQuestionIndex);
         }
     }
 
-    // 中断して最初の設定画面に戻るロジック
     function abortQuiz() {
-        if (confirm("クイズを中断して設定画面に戻りますか？\n（現在の進行状況はリセットされます）")) {
+        if (confirm("クイズを中断して設定画面に戻りますか？")) {
             showConfigScreen();
         }
+    }
+
+    // HTMLエスケープ処理（安全に文字を表示するための対策）
+    function escapeHtml(str) {
+        if (!str) return "";
+        return str
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 </script>
 
